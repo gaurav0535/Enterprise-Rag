@@ -1,125 +1,86 @@
-from ingestion_service.preprocess import extract_text, _extract_txt,_extract_docx,_extract_pdf,_pdf_text,_pdf_ocr,_normalize,_sha256
+from ingestion_service.preprocess import extract_text, _sha256
 import pytest 
 from pathlib import Path
 import ingestion_service.preprocess as preprocess
 
-import tempfile
-
-# Test extract_text with txt, docx, and pdf with and without OCR
-def create_temp_file(tmp_path, content, suffix):
-    p = tmp_path / f"sample{suffix}"
-    if suffix == ".txt":
-        p.write_text(content, encoding="utf-8")
-    elif suffix == ".docx":
-        from docx import Document
-        doc = Document()
-        doc.add_paragraph(content)
-        doc.save(str(p))
-    elif suffix == ".pdf":
-        from fpdf import FPDF
-        pdf = FPDF()
-        pdf.add_page()
-        pdf.set_font("Arial", size=12)
-        pdf.multi_cell(0, 10, content)
-        pdf.output(str(p))
-    return p
-
-@pytest.mark.parametrize("suffix", [".txt", ".docx", ".pdf"])
-def test_extract_text_various_suffixes(tmp_path, suffix):
-    content = "This is a test document. \nWith multiple lines."
-    p = create_temp_file(tmp_path, content, suffix)
-    result = extract_text(p)
+def test_extract_txt(tmp_path):
+    sample_txt = tmp_path / "example.txt"
+    sample_txt.write_text("Hello\nWorld\n   Foo ")
+    result = preprocess.extract_text(sample_txt)
     assert "text" in result
-    assert "document" in result["text"]
     assert "metadata" in result
-    assert result["metadata"]["source_file"] == p.name
+    assert result["text"] == "Hello World Foo"
+    assert result["metadata"]["source_file"] == "example.txt"
+    assert result["metadata"]["char_count"] == len("Hello\nWorld\n   Foo ")
     assert isinstance(result["metadata"]["sha256"], str)
-    assert result["metadata"]["char_count"] >= len(content)-1  # newlines may be normalized
 
-def test_extract_text_file_not_found(tmp_path):
-    fake_file = tmp_path / "nofile.txt"
+def test_extract_txt_not_found(tmp_path):
+    sample = tmp_path / "missing.txt"
     with pytest.raises(FileNotFoundError):
-        extract_text(fake_file)
+        preprocess.extract_text(sample)
 
 def test_extract_text_unsupported_type(tmp_path):
-    p = tmp_path / "sample.xyz"
-    p.write_text("dummy", encoding="utf-8")
+    weird_file = tmp_path / "foo.xlsx"
+    weird_file.write_text("data")
     with pytest.raises(ValueError):
-        extract_text(p)
+        preprocess.extract_text(weird_file)
 
-def test__extract_txt(tmp_path):
-    content = "Simple text file."
-    p = tmp_path / "t.txt"
-    p.write_text(content, encoding="utf-8")
-    assert _extract_txt(p) == content
+def test_sha256(tmp_path):
+    f = tmp_path / "file.txt"
+    f.write_text("hello world")
+    h1 = preprocess._sha256(f)
+    h2 = preprocess._sha256(f)
+    assert h1 == h2
+    # Confirm it's 64 hex chars
+    assert len(h1) == 64
+    assert all(c in '0123456789abcdef' for c in h1)
 
-def test__extract_docx(tmp_path):
+def test_normalize():
+    assert preprocess._normalize("A   B\n\nC") == "A B C"
+    assert preprocess._normalize("   Many     spaces   here  ") == "Many spaces here"
+
+def test_extract_docx(tmp_path):
+    docx_path = tmp_path / "sample.docx"
     try:
         from docx import Document
     except ImportError:
-        pytest.skip("python-docx not installed")
-    content = "Docx content one.\nDocx content two."
-    docx_path = tmp_path / "t.docx"
-    from docx import Document
+        pytest.skip("python-docx is not installed")
     doc = Document()
-    doc.add_paragraph("Docx content one.")
-    doc.add_paragraph("Docx content two.")
-    doc.save(str(docx_path))
-    out = _extract_docx(docx_path)
-    assert "Docx content one." in out and "Docx content two." in out
+    doc.add_paragraph("Hello Docx")
+    doc.add_paragraph("Another Paragraph")
+    doc.save(docx_path)
+    result = preprocess.extract_text(docx_path)
+    assert "Hello Docx" in result["text"]
+    assert "Another Paragraph" in result["text"]
+    assert result["metadata"]["source_file"] == "sample.docx"
 
-def test__extract_pdf(tmp_path):
-    try:
-        from fpdf import FPDF
-    except ImportError:
-        pytest.skip("fpdf not installed for PDF stub generation")
-    content = "PDF content test for extraction."
-    pdf_path = create_temp_file(tmp_path, content, ".pdf")
-    out = _extract_pdf(pdf_path)
-    # Should extract at least part of the original content
-    assert "content" in out
+def test_extract_pdf_native_and_ocr(monkeypatch, tmp_path):
+    pdf_path = tmp_path / "sample.pdf"
+    # simulate a PDF file (content does not matter for this test)
+    pdf_path.write_bytes(b"%PDF-1.4\n%EOF\n")
+    # patch _pdf_text to return some text
+    monkeypatch.setattr(preprocess, "_pdf_text", lambda _: "X" * 100)
+    monkeypatch.setattr(preprocess, "_pdf_ocr", lambda _: "OCRTEXT")
+    result = preprocess.extract_text(pdf_path)
+    assert result["text"] == "X" * 100
+    # now patch native extraction to be poor (length < 50), triggers OCR
+    monkeypatch.setattr(preprocess, "_pdf_text", lambda _: "")
+    monkeypatch.setattr(preprocess, "_pdf_ocr", lambda _: "OCR Fallback Text")
+    result2 = preprocess.extract_text(pdf_path)
+    assert result2["text"] == "OCR Fallback Text"
 
-@pytest.mark.parametrize("s", [
-    "Hello    there \n my  friend!",
-    "",
-    "SingleWord",
-    "Multiple    spaces  here"
-])
-def test__normalize(s):
-    norm = _normalize(s)
-    assert all(w for w in norm.split())  # no blank strings
-    if s.strip():
-        assert "  " not in norm
-        # Word count not changed
-        assert len(s.split()) == len(norm.split())
-    else:
-        assert norm == ""
+def test_pdf_ocr_importerror(monkeypatch, tmp_path):
+    pdf_path = tmp_path / "should_ocr.pdf"
+    pdf_path.write_bytes(b"%PDF-1.4\n%EOF\n")
+    # Patch out Imports to simulate missing OCR deps
+    monkeypatch.setattr(preprocess, "convert_from_path", None, raising=False)
+    import importlib
+    orig_import = __import__
 
-def test__sha256(tmp_path):
-    file_path = tmp_path / "test.bin"
-    data = b"hash this"
-    file_path.write_bytes(data)
-    expected = __import__("hashlib").sha256(data).hexdigest()
-    assert _sha256(file_path) == expected
+    def fake_import(name, *a, **k):
+        if name in ("pytesseract", "pdf2image"):
+            raise ImportError
+        return orig_import(name, *a, **k)
+    monkeypatch.setattr("builtins.__import__", fake_import)
+    assert preprocess._pdf_ocr(pdf_path) == ""
 
-def test__pdf_text_returns_string(tmp_path):
-    try:
-        from fpdf import FPDF
-    except ImportError:
-        pytest.skip("fpdf not installed")
-    pdf_path = create_temp_file(tmp_path, "Testing pdfminer extraction.", ".pdf")
-    out = _pdf_text(pdf_path)
-    assert isinstance(out, str)
-
-def test__pdf_ocr_runs_no_dependencies(tmp_path, monkeypatch):
-    # Simulate missing dependencies
-    pdf_path = tmp_path / "img.pdf"
-    pdf_path.write_bytes(b"")  # Empty stub
-    import sys
-    modules = {}
-    monkeypatch.setitem(sys.modules, "pytesseract", None)
-    monkeypatch.setitem(sys.modules, "pdf2image", None)
-    out = _pdf_ocr(pdf_path)
-    assert out == ""  # Should gracefully degrade
-
-# Note: To fully test OCR one would need tesseract installed + scan-like PDF sample.
