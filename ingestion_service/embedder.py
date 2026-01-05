@@ -1,71 +1,113 @@
-from typing import List , Dict
+# ingestion_service/embedder.py
 
+from typing import List, Dict
 import time
 import random
+import logging
+
+logger = logging.getLogger(__name__)
+
 
 class EmbeddingError(Exception):
+    """Raised when embedding generation fails."""
     pass
+
 
 class BaseEmbedder:
     """
-    Abstract embeding interface
+    Abstract embedding interface.
     """
 
-    def embed(self,texts:List[str]) -> List[List[float]]:
+    def embed(self, texts: List[str]) -> List[List[float]]:
         raise NotImplementedError
+
 
 class MockEmbedder(BaseEmbedder):
     """
-    Deterministic mock
+    Deterministic mock embedder for tests.
     """
-    def embd(self, texts :List[str]) -> List[List[float]]:
+
+    def embed(self, texts: List[str]) -> List[List[float]]:
         return [[float(len(t))] for t in texts]
+
 
 class SimulatedRemoteEmbedder(BaseEmbedder):
     """
     Simulates a remote embedding service.
     """
 
-    def embed(self,texts:List[str]) -> List[List[float]]:
+    def embed(self, texts: List[str]) -> List[List[float]]:
         time.sleep(0.2)
 
-        if random.random() < 0.1 :
+        if random.random() < 0.1:
             raise EmbeddingError("Transient embedding failure")
 
-        return [[float(len(t))] * 3 for t in texts ]
+        return [[float(len(t))] * 3 for t in texts]
 
 
-
-def embed_chunks(chunks : List[Dict],embedder : BaseEmbedder,batch_size : int = 8,max_retries : int = 3,) -> List[Dict]:
+def embed_chunks(
+    chunks: List[Dict],
+    embedder: BaseEmbedder,
+    batch_size: int = 8,
+    max_retries: int = 3,
+) -> List[Dict]:
     """
-    Attach embeddings to chunk with batching and retry
+    Attach embeddings to chunks with batching and retry.
+
+    Guarantees:
+    - Each chunk receives exactly one embedding
+    - Order is preserved
+    - Transient failures are retried
+    - Permanent failures fail loudly
     """
+    if not chunks:
+        logger.warning("No chunks received for embedding")
+        return []
 
-    texts = [c["text"] for c in chunks]
+    texts = []
+    for i, chunk in enumerate(chunks):
+        if "text" not in chunk:
+            raise EmbeddingError(f"Chunk at index {i} missing 'text'")
+        texts.append(chunk["text"])
 
-    embeddings = []
+    embeddings: List[List[float]] = []
 
-    for i in range(0,len(texts),batch_size):
-        batch = texts[i:i + batch_size]
-        retries = 0
+    for i in range(0, len(texts), batch_size):
+        batch = texts[i : i + batch_size]
 
-        while True:
+        for attempt in range(1, max_retries + 1):
             try:
                 batch_embeddings = embedder.embed(batch)
+
+                if len(batch_embeddings) != len(batch):
+                    raise EmbeddingError(
+                        "Embedding count does not match batch size"
+                    )
+
                 embeddings.extend(batch_embeddings)
                 break
-            except EmbeddingError:
-                retries +=1
-                if retries >= max_retries:
+
+            except EmbeddingError as exc:
+                logger.warning(
+                    "Embedding batch failed",
+                    extra={
+                        "attempt": attempt,
+                        "batch_size": len(batch),
+                        "error": str(exc),
+                    },
+                )
+
+                if attempt == max_retries:
                     raise
-                time.sleep(2 ** retries)
 
-    #Attach embeddings
+                time.sleep(2 ** attempt)
 
-    for chunk , emb in zip(chunks,embeddings):
-        chunk["embeddings"] = emb
+    if len(embeddings) != len(chunks):
+        raise EmbeddingError(
+            "Total embeddings do not align with number of chunks"
+        )
+
+    for chunk, emb in zip(chunks, embeddings):
+        chunk["embedding"] = emb
 
     return chunks
-
-
-
