@@ -46,7 +46,7 @@ def ingest_document(file_path:Path,doc_id:str,embedder,vector_store,chunk_size:i
     chunks = chunk_text(text = text,
     chunk_size = chunk_size,
     overlap = chunk_overlap,
-    doc_id = doc_id,
+    doc_id = doc_id,   
     sha256 = metadata["sha256"],
     )
     

@@ -11,3 +11,18 @@ class IngestResponse(BaseModel):
 class HealthResponse(BaseModel):
     status: str
 
+
+class QueryRequest(BaseModel):
+    query: str
+    top_k: int = 5
+    filter: Dict | None = None
+
+class QueryResult(BaseModel):
+    id : set
+    score : float
+    metadata : Dict
+
+class QueryResponse(BaseModel):
+    results : List[QueryResult]
+
+    

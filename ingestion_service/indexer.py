@@ -2,8 +2,20 @@
 
 from typing import List, Dict
 import logging
+import math
 
 logger = logging.getLogger(__name__)
+
+
+def _cosine(a, b):
+    dot = sum(x * y for x, y in zip(a, b))
+    norm_a = math.sqrt(sum(x * x for x in a))
+    norm_b = math.sqrt(sum(y * y for y in b))
+    if norm_a == 0 or norm_b == 0:
+        return 0.0
+    return dot / (norm_a * norm_b)
+
+
 
 
 class VectorStoreError(Exception):
@@ -20,6 +32,9 @@ class BaseVectorStore:
         raise NotImplementedError
 
     def delete(self, filter: Dict):
+        raise NotImplementedError
+
+    def search(self, vector: List[float], k: int = 5, filter: Dict | None = None):
         raise NotImplementedError
 
 
@@ -60,7 +75,27 @@ class InMemoryVectorStore(BaseVectorStore):
             "Deleted vectors",
             extra={"count": len(keys_to_delete), "filter": filter},
         )
+    
+    def search(self, vector, top_k=5, filter=None):
+        results = []
 
+        for item in self.vectors.values():
+            metadata = item.get("metadata", {})
+
+            if filter:
+                if not all(metadata.get(k) == v for k, v in filter.items()):
+                    continue
+
+            score = _cosine(vector, item["vector"])
+
+            results.append({
+                "id": item["id"],
+                "score": score,
+                "metadata": metadata,
+            })
+
+        results.sort(key=lambda x: x["score"], reverse=True)
+        return results[:top_k]
 
 def index_chunks(
     chunks: List[Dict],

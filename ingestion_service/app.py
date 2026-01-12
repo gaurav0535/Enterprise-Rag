@@ -14,9 +14,13 @@ from ingestion_service.indexer import InMemoryVectorStore, delete_document_versi
 from ingestion_service.preprocess import extract_text
 from ingestion_service.jobs import JobStore
 from ingestion_service.registry import InMemoryDocumentRegistry
+from ingestion_service.retriever import Retriever
+from ingestion_service.query_pipeline import query_documents
+from ingestion_service.models import QueryRequest, QueryResponse
+
+
 
 from fastapi import BackgroundTasks
-
 
 logger = logging.getLogger(__name__)
 
@@ -27,6 +31,9 @@ vector_store = InMemoryVectorStore()
 
 job_store = JobStore()
 registry = InMemoryDocumentRegistry()  
+
+retriever = Retriever(embedder=embedder,vector_store=vector_store)
+
 
 
 app = FastAPI(
@@ -146,4 +153,18 @@ def run_ingestion_job(job_id:str,file_path:Path,doc_id:str):
         logger.exception("Failed to run ingestion job")
         job_store.update(job_id,"failed",str(exc))
         raise HTTPException(status_code=500, detail="Failed to run ingestion job") from exc
+    
+
+@app.post("/query",response_model=QueryResponse)
+def query(req : QueryRequest):
+
+    results = query_documents(
+        query = req.query,
+        retriever = retriever,
+        top_k = req.top_k,
+        filter = req.filter,
+    )
+
+    return {"results": results}
+
     
