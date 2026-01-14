@@ -4,13 +4,11 @@ from typing import List, Dict
 import time
 import random
 import logging
+from ingestion_service.errors import EmbeddingError
 
 logger = logging.getLogger(__name__)
 
 
-class EmbeddingError(Exception):
-    """Raised when embedding generation fails."""
-    pass
 
 
 class BaseEmbedder:

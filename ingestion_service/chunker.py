@@ -3,6 +3,7 @@
 from typing import List, Dict
 import hashlib
 import logging
+from ingestion_service.errors import ChunkingError
 
 logger = logging.getLogger(__name__)
 
@@ -34,7 +35,7 @@ def chunk_text(
         return []
 
     if overlap >= chunk_size:
-        raise ValueError("overlap must be smaller than chunk_size")
+        raise ChunkingError("overlap must be smaller than chunk_size")
 
     chunks = []
     text_length = len(text)

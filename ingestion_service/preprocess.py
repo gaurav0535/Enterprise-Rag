@@ -4,6 +4,7 @@ from pathlib import Path
 from typing import Dict
 import hashlib
 import logging
+from ingestion_service.errors import ExtractionError
 
 logger = logging.getLogger(__name__)
 
@@ -27,12 +28,12 @@ def extract_text(file_path: Path) -> Dict:
             }
         }
 
-    Raises:
-        FileNotFoundError
-        ValueError (unsupported file type)
-    """
-    if not file_path.exists():
-        raise FileNotFoundError(f"File not found: {file_path}")
+        Raises:
+            FileNotFoundError
+            ValueError (unsupported file type)
+        """
+        if not file_path.exists():
+        raise ExtractionError(f"File not found: {file_path}")
 
     suffix = file_path.suffix.lower()
 

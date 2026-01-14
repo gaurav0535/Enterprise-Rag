@@ -3,6 +3,7 @@
 from typing import List, Dict
 import logging
 import math
+from ingestion_service.errors import IndexingError
 
 logger = logging.getLogger(__name__)
 
@@ -18,9 +19,9 @@ def _cosine(a, b):
 
 
 
-class VectorStoreError(Exception):
-    """Raised when vector store operations fail."""
-    pass
+# class VectorStoreError(Exception):
+#     """Raised when vector store operations fail."""
+#     pass
 
 
 class BaseVectorStore:
@@ -56,7 +57,7 @@ class InMemoryVectorStore(BaseVectorStore):
     )
         for vector in vectors:
             if "id" not in vector:
-                raise VectorStoreError("Vector must have an 'id'")
+                raise IndexingError("Vector must have an 'id'")
             self.vectors[vector["id"]] = vector
 
         logger.info(
@@ -146,7 +147,7 @@ def index_chunks(
     for i, chunk in enumerate(chunks):
         missing = required_fields - chunk.keys()
         if missing:
-            raise VectorStoreError(
+            raise IndexingError(
                 f"Chunk at index {i} missing fields: {missing}"
             )
 

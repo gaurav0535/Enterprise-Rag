@@ -20,6 +20,17 @@ from ingestion_service.models import QueryRequest, QueryResponse
 
 from ingestion_service.logging_utils import configure_logging
 
+from ingestion_services.errors import (
+    IngestionError,
+    ExtractionError,
+    EmbeddingError,
+    ChunkingError,
+    IndexingError,
+    RetrievalError,
+    
+)
+
+
 configure_logging()
 
 
@@ -77,14 +88,14 @@ def ingest(background_tasks: BackgroundTasks, file: UploadFile = File(...)):
         with target_path.open("wb") as f:
             shutil.copyfileobj(file.file, f)
             logger.info(
-    "File persisted to storage",
-    extra={**log_ctx, "action": "persist"},
-)
+                "File persisted to storage",
+                extra={**log_ctx, "action": "persist"},
+            )
     except Exception as exc:
         logger.exception(
-    "Failed to store uploaded file",
-    extra=log_ctx,
-)
+            "Failed to store uploaded file",
+            extra=log_ctx,
+        )
         raise HTTPException(status_code=500, detail="Failed to store file") from exc
 
     background_tasks.add_task(run_ingestion_job,job_id,target_path,file.filename)
@@ -104,44 +115,6 @@ def get_job(job_id: str):
     if not job:
         raise HTTPException(status_code=404, detail="Job not found")
     return job
-
-
-    # try:
-    #     #1 Compute hash (cheap)
-    #     extracted = extract_text(target_path)
-    #     sha256 = extracted["metadata"]["sha256"]
-
-    #     #2 Safe delete (idempotent)
-    #     delete_document_version(doc_id=file.filename,sha256=sha256,
-    #     vector_store=vector_store,
-    #     )
-
-    #     #3 Ingest
-    #     chunk_count = ingest_document(file_path=target_path,
-    #     doc_id=file.filename,
-    #     embedder=embedder,
-    #     vector_store=vector_store,
-    #     )
-    
-    # except Exception as exc:
-    #     logger.exception("Failed to ingest file")
-    #     raise HTTPException(status_code=500, detail="Failed to ingest file") from exc    
-
-    # logger.info(
-    #     "File ingested",
-    #     extra={
-    #         "job_id": job_id,
-    #         "filename": file.filename,
-    #         "path": str(target_path),
-    #     },
-    # )
-
-    # return {
-    #     "job_id": job_id,
-    #     "status": "completed",
-    #     "file_name": file.filename,
-    #     "chunks_indexed": chunk_count,
-    # }
 
 
 def run_ingestion_job(job_id:str,file_path:Path,doc_id:str):
@@ -185,7 +158,7 @@ def run_ingestion_job(job_id:str,file_path:Path,doc_id:str):
 
         job_store.update(job_id,"completed")
 
-    except Exception as exc:
+    except (ExtractionError, ChunkingError, EmbeddingError, IndexingError) as exc:
         logger.exception("Failed to run ingestion job",extra=log_ctx)
         job_store.update(job_id,"failed",str(exc))
 
