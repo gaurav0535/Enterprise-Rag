@@ -69,7 +69,13 @@ def embed_chunks(
         if "text" not in chunk:
             raise EmbeddingError(f"Chunk at index {i} missing 'text'")
         texts.append(chunk["text"])
-
+    logger.info(
+        "Embedding batch",
+        extra={
+            "component": "embedder",
+            "action": "embed",
+        },
+    )
     embeddings: List[List[float]] = []
 
     for i in range(0, len(texts), batch_size):
@@ -77,6 +83,13 @@ def embed_chunks(
 
         for attempt in range(1, max_retries + 1):
             try:
+                logger.warning(
+                "Embedding retry",
+                extra={
+                    "component": "embedder",
+                    "action": "retry",
+                },
+            )
                 batch_embeddings = embedder.embed(batch)
 
                 if len(batch_embeddings) != len(batch):

@@ -18,6 +18,9 @@ from ingestion_service.retriever import Retriever
 from ingestion_service.query_pipeline import query_documents
 from ingestion_service.models import QueryRequest, QueryResponse
 
+from ingestion_service.logging_utils import configure_logging
+
+configure_logging()
 
 
 from fastapi import BackgroundTasks
@@ -61,15 +64,34 @@ def ingest(background_tasks: BackgroundTasks, file: UploadFile = File(...)):
     job_id = job_store.create()
     target_path = STORAGE_DIR / f"{job_id}_{file.filename}"
 
+    log_ctx = {
+        "job_id":job_id,
+        "doc_id":file.filename,
+        "component":"app",
+        "action":"ingest_request",
+    }
+
+    logger.info("Received ingest request", extra=log_ctx)
+
     try:
         with target_path.open("wb") as f:
             shutil.copyfileobj(file.file, f)
+            logger.info(
+    "File persisted to storage",
+    extra={**log_ctx, "action": "persist"},
+)
     except Exception as exc:
-        logger.exception("Failed to persist uploaded file")
+        logger.exception(
+    "Failed to store uploaded file",
+    extra=log_ctx,
+)
         raise HTTPException(status_code=500, detail="Failed to store file") from exc
 
     background_tasks.add_task(run_ingestion_job,job_id,target_path,file.filename)
-
+    logger.info(
+        "Ingestion job enqueued",
+        extra={**log_ctx, "action": "enqueue"},
+    )
     return {
         "job_id": job_id,
         "status": "queued",
@@ -125,6 +147,13 @@ def get_job(job_id: str):
 def run_ingestion_job(job_id:str,file_path:Path,doc_id:str):
 
     job_store.update(job_id,"running")
+    log_ctx = {
+    "job_id": job_id,
+    "doc_id": doc_id,
+    "component": "pipeline",
+    "action": "start",
+    }
+    logger.info("Ingestion job started", extra=log_ctx)
 
     try:
         extracted = extract_text(file_path)
@@ -132,8 +161,15 @@ def run_ingestion_job(job_id:str,file_path:Path,doc_id:str):
 
         if registry.exists(doc_id,sha256):
             job_store.update(job_id,"completed")
+            logger.info(
+                "Document version already ingested",
+                extra={**log_ctx, "action": "skip"},
+            )
             return
-        
+        logger.info(
+    "Deleting previous document version",
+    extra={**log_ctx, "action": "delete"},
+)
         delete_document_version(doc_id=doc_id,sha256=sha256,
         vector_store=vector_store,
         )
@@ -150,21 +186,41 @@ def run_ingestion_job(job_id:str,file_path:Path,doc_id:str):
         job_store.update(job_id,"completed")
 
     except Exception as exc:
-        logger.exception("Failed to run ingestion job")
+        logger.exception("Failed to run ingestion job",extra=log_ctx)
         job_store.update(job_id,"failed",str(exc))
+
+        logger.exception(
+            "Ingestion job failed",
+            extra={**log_ctx, "action": "fail"},
+        )
         raise HTTPException(status_code=500, detail="Failed to run ingestion job") from exc
     
 
 @app.post("/query",response_model=QueryResponse)
 def query(req : QueryRequest):
 
-    results = query_documents(
-        query = req.query,
-        retriever = retriever,
-        top_k = req.top_k,
-        filter = req.filter,
-    )
+    log_ctx = {
+        "component": "app",
+        "action": "search",
+    }
+    logger.info(f"Received query: {req.query}", extra=log_ctx)
 
-    return {"results": results}
+    try:
+        results = query_documents(
+            query=req.query,
+            retriever=retriever,
+            top_k=req.top_k,
+            filter=req.filter,
+        )
 
+        logger.info(
+            "Query completed",
+            extra={**log_ctx, "count": len(results)},
+        )
+
+        return {"results": results}
     
+    except Exception as exc:
+        logger.exception("Query failed", extra=log_ctx)
+        raise HTTPException(status_code=500, detail="Query failed") from exc
+

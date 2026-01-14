@@ -1,7 +1,7 @@
 #pydentic  schemas 
 
 from pydantic import BaseModel
-from typing import Optional
+from typing import Optional , Dict , List 
 
 class IngestResponse(BaseModel):
     job_id: str
@@ -25,4 +25,3 @@ class QueryResult(BaseModel):
 class QueryResponse(BaseModel):
     results : List[QueryResult]
 
-    

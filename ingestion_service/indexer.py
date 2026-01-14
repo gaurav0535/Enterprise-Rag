@@ -47,6 +47,13 @@ class InMemoryVectorStore(BaseVectorStore):
         self.vectors: Dict[str, Dict] = {}
 
     def upsert(self, vectors: List[Dict]):
+        logger.info(
+        "Vectors upserted",
+        extra={
+            "component": "indexer",
+            "action": "upsert",
+        },
+    )
         for vector in vectors:
             if "id" not in vector:
                 raise VectorStoreError("Vector must have an 'id'")
@@ -61,6 +68,13 @@ class InMemoryVectorStore(BaseVectorStore):
         """
         Delete all vectors whose metadata matches the filter.
         """
+        logger.info(
+    "Vectors deleted",
+    extra={
+        "component": "indexer",
+        "action": "delete",
+    },
+)
         keys_to_delete = []
 
         for key, value in self.vectors.items():
