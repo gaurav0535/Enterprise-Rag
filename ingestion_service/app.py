@@ -27,9 +27,8 @@ from ingestion_services.errors import (
     ChunkingError,
     IndexingError,
     RetrievalError,
-    
 )
-
+from ingestion_service.metrics import metrics
 
 configure_logging()
 
@@ -129,33 +128,38 @@ def run_ingestion_job(job_id:str,file_path:Path,doc_id:str):
     logger.info("Ingestion job started", extra=log_ctx)
 
     try:
-        extracted = extract_text(file_path)
-        sha256 = extracted["metadata"]["sha256"]
+        with metrics.timer("ingestion.total_time"):
+            extracted = extract_text(file_path)
+            sha256 = extracted["metadata"]["sha256"]
 
-        if registry.exists(doc_id,sha256):
-            job_store.update(job_id,"completed")
+            if registry.exists(doc_id,sha256):
+                job_store.update(job_id,"completed")
+                logger.info(
+                    "Document version already ingested",
+                    extra={**log_ctx, "action": "skip"},
+                )
+                return
             logger.info(
-                "Document version already ingested",
-                extra={**log_ctx, "action": "skip"},
+        "Deleting previous document version",
+        extra={**log_ctx, "action": "delete"},
+    )
+            delete_document_version(doc_id=doc_id,sha256=sha256,
+            vector_store=vector_store,
             )
-            return
+
+            ingest_document(
+                file_path = file_path,
+                doc_id = doc_id,
+                embedder = embedder,
+                vector_store = vector_store,
+            )
+
+            registry.register(doc_id,sha256)
+        metrics.incr("ingestion.success")
         logger.info(
-    "Deleting previous document version",
-    extra={**log_ctx, "action": "delete"},
-)
-        delete_document_version(doc_id=doc_id,sha256=sha256,
-        vector_store=vector_store,
+            "Ingestion job completed",
+            extra={**log_ctx, "action": "end"},
         )
-
-        ingest_document(
-            file_path = file_path,
-            doc_id = doc_id,
-            embedder = embedder,
-            vector_store = vector_store,
-        )
-
-        registry.register(doc_id,sha256)
-
         job_store.update(job_id,"completed")
 
     except (ExtractionError, ChunkingError, EmbeddingError, IndexingError) as exc:
