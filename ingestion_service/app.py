@@ -201,3 +201,17 @@ def query(req : QueryRequest):
         logger.exception("Query failed", extra=log_ctx)
         raise HTTPException(status_code=500, detail="Query failed") from exc
 
+@app.get("/metrics")
+def get_metrics():
+    return {
+        "counters": dict(metrics.counters),
+        "timings": {
+            name: {
+                "count": len(values),
+                "avg": sum(values) / len(values) if values else 0,
+                "max": max(values) if values else 0,
+            }
+            for name, values in metrics.timings.items()
+        },
+    }
+

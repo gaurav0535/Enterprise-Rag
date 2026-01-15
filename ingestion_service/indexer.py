@@ -4,6 +4,7 @@ from typing import List, Dict
 import logging
 import math
 from ingestion_service.errors import IndexingError
+from ingestion_service.metrics import metrics
 
 logger = logging.getLogger(__name__)
 
@@ -164,6 +165,7 @@ def index_chunks(
         })
 
     vector_store.upsert(vectors)
+    metrics.incr("indexer.upsert_count", len(vectors))
 
 
 def delete_document_version(
@@ -178,3 +180,4 @@ def delete_document_version(
         "doc_id": doc_id,
         "sha256": sha256,
     })
+    metrics.incr("indexer.delete_count")
