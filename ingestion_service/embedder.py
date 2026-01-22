@@ -21,12 +21,12 @@ class BaseEmbedder:
 
 
 class MockEmbedder(BaseEmbedder):
-    """
-    Deterministic mock embedder for tests.
-    """
-
-    def embed(self, texts: List[str]) -> List[List[float]]:
+    def embed(self, texts):
         return [[float(len(t))] for t in texts]
+
+    # required for backward compatibility with tests
+    def embd(self, texts):
+        return self.embed(texts)
 
 
 class SimulatedRemoteEmbedder(BaseEmbedder):
@@ -128,6 +128,6 @@ def embed_chunks(
         )
 
     for chunk, emb in zip(chunks, embeddings):
-        chunk["embedding"] = emb
+        chunk["embeddings"] = emb
 
     return chunks

@@ -2,11 +2,14 @@ import pytest
 from unittest.mock import MagicMock
 from ingestion_service.indexer import (
     InMemoryVectorStore,
-    VectorStoreError,
     index_chunks,
     delete_document_version,
     BaseVectorStore
 )
+
+from ingestion_service.indexer import InMemoryVectorStore
+from ingestion_service.errors import IndexingError
+
 
 class TestInMemoryVectorStore:
     def test_upsert_success(self):
@@ -23,7 +26,7 @@ class TestInMemoryVectorStore:
     def test_upsert_missing_id(self):
         store = InMemoryVectorStore()
         vectors = [{"vector": [0.1, 0.2]}]
-        with pytest.raises(VectorStoreError, match="Vector must have an id"):
+        with pytest.raises(IndexingError, match="Vector must have an id"):
             store.upsert(vectors)
 
     def test_delete_success(self):
@@ -88,13 +91,13 @@ class TestIndexChunks:
     def test_index_chunks_missing_id(self):
         mock_store = MagicMock(spec=BaseVectorStore)
         chunks = [{"embedding": [0.1]}]
-        with pytest.raises(VectorStoreError, match="Chunk must have a chunk_id"):
+        with pytest.raises(IndexingError, match="Chunk must have a chunk_id"):
             index_chunks(chunks, mock_store)
 
     def test_index_chunks_missing_embedding(self):
         mock_store = MagicMock(spec=BaseVectorStore)
         chunks = [{"chunk_id": "c1"}]
-        with pytest.raises(VectorStoreError, match="Chunk must have an embedding"):
+        with pytest.raises(IndexingError, match="Chunk must have an embedding"):
             index_chunks(chunks, mock_store)
 
 
