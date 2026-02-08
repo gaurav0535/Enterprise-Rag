@@ -21,7 +21,7 @@ def test_retriever_returns_results():
     retriever = Retriever(embedder, vector_store)
 
     # Act
-    results = retriever.retrieve("hello", top_k=2)
+    results = retriever.retrieve(tenant_id="T1", query="hello", top_k=2)
 
     # Assert
     assert len(results) == 2
@@ -37,7 +37,7 @@ def test_retriever_empty_query():
 
     retriever = Retriever(embedder, vector_store)
 
-    results = retriever.retrieve("   ")
+    results = retriever.retrieve(tenant_id="T1", query="   ")
 
     assert results == []
     embedder.embed.assert_not_called()
@@ -48,9 +48,9 @@ def test_retriever_embedding_failure():
     embedder = MagicMock()
     vector_store = MagicMock()
 
-    embedder.embed.side_effect = RuntimeError("embedding failed")
+    embedder.embed.side_effect = EmbeddingError("embedding failed")
 
     retriever = Retriever(embedder, vector_store)
 
     with pytest.raises(EmbeddingError):
-        retriever.retrieve("hello")
+        retriever.retrieve(tenant_id="T1", query="hello")

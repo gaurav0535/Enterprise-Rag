@@ -1,10 +1,11 @@
-# ingestion_service/embedder.py
-
 from typing import List, Dict
 import time
 import random
 import logging
+
 from ingestion_service.errors import EmbeddingError
+from ingestion_service.metrics import metrics
+from ingestion_service.circuit_breaker import CircuitBreaker, CircuitBreakerOpen
 
 logger = logging.getLogger(__name__)
 
@@ -12,10 +13,6 @@ logger = logging.getLogger(__name__)
 class BaseEmbedder:
     def embed(self, texts: List[str]) -> List[List[float]]:
         raise NotImplementedError
-
-    # TEST COMPATIBILITY
-    def embd(self, texts: List[str]) -> List[List[float]]:
-        return self.embed(texts)
 
 
 class MockEmbedder(BaseEmbedder):
@@ -26,35 +23,32 @@ class MockEmbedder(BaseEmbedder):
 class SimulatedRemoteEmbedder(BaseEmbedder):
     def embed(self, texts: List[str]) -> List[List[float]]:
         time.sleep(0.2)
-        if random.random() < 0.1:
-            raise EmbeddingError("Transient embedding failure")
+        if random.random() < 0.3:
+            raise EmbeddingError("Remote embedding failure")
         return [[float(len(t))] * 3 for t in texts]
 
 
-def embed_chunks(
-    chunks: List[Dict],
-    embedder: BaseEmbedder,
-    batch_size: int = 8,
-    max_retries: int = 3,
-) -> List[Dict]:
+class CircuitBreakerEmbedder(BaseEmbedder):
+    """
+    Embedder wrapped with circuit breaker
+    """
 
-    texts = [c["text"] for c in chunks]
-    embeddings: List[List[float]] = []
+    def __init__(self, embedder: BaseEmbedder):
+        self.embedder = embedder
+        self.breaker = CircuitBreaker(
+            failure_threshold=3,
+            recovery_timeout=20,
+        )
 
-    for i in range(0, len(texts), batch_size):
-        batch = texts[i:i + batch_size]
+    def embed(self, texts: List[str]) -> List[List[float]]:
+        self.breaker.allow()
 
-        for attempt in range(max_retries):
-            try:
-                batch_emb = embedder.embed(batch)
-                embeddings.extend(batch_emb)
-                break
-            except EmbeddingError:
-                if attempt == max_retries - 1:
-                    raise
-                time.sleep(2 ** attempt)
+        try:
+            vectors = self.embedder.embed(texts)
+            self.breaker.success()
+            return vectors
 
-    for chunk, emb in zip(chunks, embeddings):
-        chunk["embeddings"] = emb  # REQUIRED BY TESTS
-
-    return chunks
+        except Exception as exc:
+            self.breaker.failure()
+            logger.exception("Embedding failed")
+            raise

@@ -11,8 +11,8 @@ def test_retriever_uses_cache():
 
     retriever = Retriever(embedder, vector_store)
 
-    r1 = retriever.retrieve("hello")
-    r2 = retriever.retrieve("hello")
+    r1 = retriever.retrieve(tenant_id="T1", query="hello")
+    r2 = retriever.retrieve(tenant_id="T1", query="hello")
 
     assert r1 == r2
     embedder.embed.assert_called_once()

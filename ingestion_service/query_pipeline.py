@@ -2,6 +2,7 @@ from typing import List,Dict
 from ingestion_service.retriever import Retriever
 
 def query_documents(
+    tenant_id: str,
     query : str,
     retriever : Retriever,
     top_k : int = 5,
@@ -11,5 +12,5 @@ def query_documents(
     End to end retrieval pipeline.
     """
 
-    return retriever.retrieve(query=query,top_k=top_k,filter=filter)
+    return retriever.retrieve(tenant_id=tenant_id, query=query,top_k=top_k,filter=filter)
     

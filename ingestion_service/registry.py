@@ -1,62 +1,28 @@
-from typing import Dict , Tuple
-import logging
+# ingestion_service/registry.py
 
-logger = logging.getLogger(__name__)
+class BaseDocumentRegistry:
+    def exists(self, tenant_id: str, doc_id: str, sha256: str) -> bool:
+        raise NotImplementedError
 
-class DocumentRegistryError(Exception):
-    pass
+    def register(self, tenant_id: str, doc_id: str, sha256: str):
+        raise NotImplementedError
 
 
-class InMemoryDocumentRegistry:
-    """
-    In memory document registry.
-
-    Act as the source of truth for document versions.
-    
-    """
-    
+class InMemoryDocumentRegistry(BaseDocumentRegistry):
     def __init__(self):
-        self._registry: Dict[Tuple[str,str],str] = {}    
+        self._data = set()
 
-    def exists(self,doc_id:str,sha256:str) ->bool:
-        """
-        Check if the document already present 
-        """
-        return (doc_id,sha256) in self._registry
+    def exists(self, tenant_id: str, doc_id: str, sha256: str) -> bool:
+        return (tenant_id, doc_id, sha256) in self._data
 
-    def register(self,doc_id: str,sha256 :str,status:str = "completed"):
-        """
-        Register a new document version
-        """
-        key = (doc_id,sha256)
-        if key in self._registry:
-            raise DocumentRegistryError("Document already registered")
-        
-        self._registry[key] = status
+    def register(self, tenant_id: str, doc_id: str, sha256: str):
+        self._data.add((tenant_id, doc_id, sha256))
 
-        logger.info(
-            "Registered document version ",
-            extra={
-                "doc_id": doc_id,
-                "sha256": sha256,
-                "status": status,
-            },
-        )
+    def delete(self, tenant_id: str, doc_id: str, sha256: str):
+        self._data.discard((tenant_id, doc_id, sha256))
 
-    def delete(self,doc_id:str,sha256:str):
-        """
-        Delete a document version
-        """
-        key = (doc_id,sha256)
-        if key not in self._registry:
-            raise DocumentRegistryError("Document not registered")
-        
-        self._registry.pop(key)
-
-        logger.info(
-            "Deleted document version",
-            extra={
-                "doc_id": doc_id,
-                "sha256": sha256,
-            },
-        )
+    def get(self, tenant_id: str, doc_id: str) -> Dict | None:
+        for t, d, s in self._data:
+            if t == tenant_id and d == doc_id:
+                return {"doc_id": d, "sha256": s, "tenant_id": t}
+        return None

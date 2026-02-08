@@ -3,6 +3,7 @@ from pathlib import Path
 from ingestion_service.pipeline import ingest_document
 from ingestion_service.embedder import MockEmbedder
 from ingestion_service.indexer import InMemoryVectorStore
+from unittest.mock import MagicMock
 
 def test_end_to_end_pipeline(tmp_path:Path):
     #Arraange 
@@ -13,10 +14,12 @@ def test_end_to_end_pipeline(tmp_path:Path):
     vector_store = InMemoryVectorStore()
     #Act
     chunk_count = ingest_document(
+        tenant_id="test_tenant",
         file_path=test_file,
         doc_id="test_doc",
         embedder=embedder,
         vector_store=vector_store,
+        registry=MagicMock(),
     )
 
     #Assert

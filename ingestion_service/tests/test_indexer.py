@@ -75,11 +75,12 @@ class TestIndexChunks:
                 "sha256": "hash",
                 "chunk_index": 0,
                 "char_start": 0,
-                "char_end": 10
+                "char_end": 10,
+                "tenant_id": "T1"
             }
         ]
         
-        index_chunks(chunks, mock_store)
+        index_chunks(chunks=chunks, vector_store=mock_store)
         
         mock_store.upsert.assert_called_once()
         call_args = mock_store.upsert.call_args[0][0]
@@ -91,14 +92,14 @@ class TestIndexChunks:
     def test_index_chunks_missing_id(self):
         mock_store = MagicMock(spec=BaseVectorStore)
         chunks = [{"embedding": [0.1]}]
-        with pytest.raises(IndexingError, match="Chunk must have a chunk_id"):
-            index_chunks(chunks, mock_store)
+        with pytest.raises(IndexingError, match="missing.*chunk_id"):
+            index_chunks(chunks=chunks, vector_store=mock_store)
 
     def test_index_chunks_missing_embedding(self):
         mock_store = MagicMock(spec=BaseVectorStore)
         chunks = [{"chunk_id": "c1"}]
-        with pytest.raises(IndexingError, match="Chunk must have an embedding"):
-            index_chunks(chunks, mock_store)
+        with pytest.raises(IndexingError, match="missing.*embeddings"):
+            index_chunks(chunks=chunks, vector_store=mock_store)
 
 
 def test_delete_document_version():
@@ -106,6 +107,6 @@ def test_delete_document_version():
     doc_id = "doc1"
     sha256 = "hash123"
     
-    delete_document_version(doc_id, sha256, mock_store)
+    delete_document_version(doc_id=doc_id, sha256=sha256, vector_store=mock_store)
     
     mock_store.delete.assert_called_once_with({"doc_id": doc_id, "sha256": sha256})

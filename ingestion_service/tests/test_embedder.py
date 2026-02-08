@@ -10,7 +10,7 @@ from ingestion_service.embedder import (
 def test_mock_embedder():
     emb = MockEmbedder()
     inputs = ["abc", "de", ""]  # lens: 3, 2, 0
-    result = emb.embd(inputs)
+    result = emb.embed(inputs)
     assert result == [[3.0], [2.0], [0.0]]
 
 def test_base_embedder_not_implemented():
@@ -58,7 +58,7 @@ def test_embed_chunks_batches(monkeypatch):
         {"text": "abcdefghi"},
     ]
     # batch_size=3, so should be 3 batches
-    out = embed_chunks([c.copy() for c in chunks], emb, batch_size=3)
+    out = embed_chunks(chunks=[c.copy() for c in chunks], embedder=emb, batch_size=3)
     # Each chunk must have 'embeddings' matching expected
     for orig, o in zip(chunks, out):
         l = float(len(orig["text"]))
@@ -75,7 +75,7 @@ def test_embed_chunks_retry_on_embedding_error(monkeypatch):
             return [[42.0] for _ in texts]
     # Patch time.sleep to avoid actual sleep
     monkeypatch.setattr("time.sleep", lambda x: None)
-    out = embed_chunks([chunk.copy()], FailingEmbedder(), batch_size=1, max_retries=3)
+    out = embed_chunks(chunks=[chunk.copy()], embedder=FailingEmbedder(), batch_size=1, max_retries=3)
     assert out[0]["embeddings"] == [42.0]
     assert calls["embed"] == 2
 
@@ -85,5 +85,5 @@ def test_embed_chunks_retry_exceeds(monkeypatch):
             raise EmbeddingError("always fails")
     monkeypatch.setattr("time.sleep", lambda x: None)
     with pytest.raises(EmbeddingError):
-        embed_chunks([{"text": "x"}], AlwaysFailEmbedder(), batch_size=1, max_retries=2)
+        embed_chunks(chunks=[{"text": "x"}], embedder=AlwaysFailEmbedder(), batch_size=1, max_retries=2)
 
