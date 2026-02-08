@@ -70,12 +70,12 @@ class TestIndexChunks:
         chunks = [
             {
                 "chunk_id": "c1",
-                "embedding": [0.1, 0.1],
+                "embeddings": [0.1, 0.1],
                 "doc_id": "d1",
                 "sha256": "hash",
                 "chunk_index": 0,
-                "chunk_start": 0,
-                "chunk_end": 10
+                "char_start": 0,
+                "char_end": 10
             }
         ]
         

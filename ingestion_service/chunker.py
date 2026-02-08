@@ -1,3 +1,5 @@
+# ingestion_service/chunker.py
+
 from typing import List, Dict
 import hashlib
 import logging
@@ -5,6 +7,13 @@ from ingestion_service.errors import ChunkingError
 
 logger = logging.getLogger(__name__)
 
+
+def _chunk_id(doc_id: str, sha256: str, index: int) -> str:
+    raw = f"{doc_id}:{sha256}:{index}"
+    return hashlib.sha256(raw.encode()).hexdigest()
+
+
+# 
 
 def chunk_text(
     text: str,
@@ -20,45 +29,39 @@ def chunk_text(
     if not text:
         return []
 
-    chunks = []
-    text_length = len(text)
-    start = 0
-    index = 0
+    text_len = len(text)
 
-    # If text fits in one chunk → return exactly one
-    if text_length <= chunk_size:
+    # SHORT TEXT → SINGLE CHUNK
+    if text_len <= chunk_size:
         return [{
             "chunk_id": _chunk_id(doc_id, sha256, 0),
-            "chunk_index": 0,
-            "text": text,
-            "char_start": 0,
-            "char_end": text_length,
             "doc_id": doc_id,
             "sha256": sha256,
+            "chunk_index": 0,
+            "char_start": 0,
+            "char_end": text_len,
+            "text": text,
         }]
 
-    while start < text_length:
-        end = min(start + chunk_size, text_length)
+    chunks = []
+    start = 0
+    index = 0
+    step = chunk_size - overlap
+
+    while start < text_len:
+        end = min(start + chunk_size, text_len)
 
         chunks.append({
             "chunk_id": _chunk_id(doc_id, sha256, index),
-            "chunk_index": index,
-            "text": text[start:end],
-            "char_start": start,
-            "char_end": end,
             "doc_id": doc_id,
             "sha256": sha256,
+            "chunk_index": index,
+            "char_start": start,
+            "char_end": end,
+            "text": text[start:end],
         })
 
         index += 1
-        start = end - overlap
-
-        if start >= text_length:
-            break
+        start += step
 
     return chunks
-
-
-def _chunk_id(doc_id: str, sha256: str, index: int) -> str:
-    raw = f"{doc_id}:{sha256}:{index}"
-    return hashlib.sha256(raw.encode()).hexdigest()

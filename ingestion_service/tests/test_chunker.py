@@ -42,7 +42,8 @@ def test_chunk_test_overlap_gt_size():
     # This test verifies that chunk_test raises an error if overlap is >= chunk_size.
     text = "testtext"
     # overlap > chunk_size should cause function to raise ValueError
-    with pytest.raises(ValueError):
+    from ingestion_service.errors import ChunkingError
+    with pytest.raises(ChunkingError):
         chunk_text(text, doc_id="d", sha256="h", chunk_size=100, overlap=200)
 
 def test_chunk_test_short_text():
