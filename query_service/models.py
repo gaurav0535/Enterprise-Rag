@@ -5,6 +5,7 @@ from typing import List, Dict, Optional
 
 class QueryRequest(BaseModel):
     query: str
+    tenant_id: str
     top_k: int = 5
     filter: Optional[Dict] = None
 

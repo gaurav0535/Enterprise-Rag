@@ -17,6 +17,7 @@ def health():
 @app.post("/query", response_model=QueryResponse)
 def query_documents(req: QueryRequest):
     results = retriever.retrieve(
+        tenant_id=req.tenant_id,
         query=req.query,
         top_k=req.top_k,
         filter=req.filter,
