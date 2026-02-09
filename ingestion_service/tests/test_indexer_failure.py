@@ -28,5 +28,4 @@ def test_indexing_failure_propagates(tmp_path):
             doc_id="doc1",
             embedder=MockEmbedder(),
             vector_store=FailingVectorStore(),
-            registry=MagicMock(),
         )

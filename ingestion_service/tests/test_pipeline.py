@@ -19,7 +19,6 @@ def test_end_to_end_pipeline(tmp_path:Path):
         doc_id="test_doc",
         embedder=embedder,
         vector_store=vector_store,
-        registry=MagicMock(),
     )
 
     #Assert

@@ -18,7 +18,6 @@ def test_tenant_isolation(tmp_path):
         doc_id="doc",
         embedder=embedder,
         vector_store=store,
-        registry=registry,
     )
 
     ingest_document(
@@ -27,13 +26,12 @@ def test_tenant_isolation(tmp_path):
         doc_id="doc",
         embedder=embedder,
         vector_store=store,
-        registry=registry,
     )
 
     retriever = Retriever(embedder, store)
 
-    res_a = retriever.retrieve(tenant_id="A", query="hello")
-    res_b = retriever.retrieve(tenant_id="B", query="hello")
+    res_a = retriever.retrieve(query="hello", filter={"tenant_id": "A"})
+    res_b = retriever.retrieve(query="hello", filter={"tenant_id": "B"})
 
     assert res_a
     assert res_b

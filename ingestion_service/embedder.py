@@ -52,3 +52,32 @@ class CircuitBreakerEmbedder(BaseEmbedder):
             self.breaker.failure()
             logger.exception("Embedding failed")
             raise
+
+
+def embed_chunks(
+    chunks: List[Dict],
+    embedder: BaseEmbedder,
+    batch_size: int = 8,
+    max_retries: int = 3,
+) -> List[Dict]:
+
+    texts = [c["text"] for c in chunks]
+    embeddings: List[List[float]] = []
+
+    for i in range(0, len(texts), batch_size):
+        batch = texts[i:i + batch_size]
+
+        for attempt in range(1, max_retries + 1):
+            try:
+                batch_emb = embedder.embed(batch)
+                embeddings.extend(batch_emb)
+                break
+            except Exception: # Catch generic exception as CircuitBreaker might raise different ones
+                if attempt == max_retries:
+                    raise
+                time.sleep(2 ** attempt)
+
+    for c, e in zip(chunks, embeddings):
+        c["embeddings"] = e
+
+    return chunks

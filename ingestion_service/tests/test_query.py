@@ -21,7 +21,6 @@ def test_query_returns_results(tmp_path):
         doc_id="doc1",
         embedder=embedder,
         vector_store=store,
-        registry=MagicMock(),
     )
 
     retriever = Retriever(embedder, store)

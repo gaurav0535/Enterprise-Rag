@@ -1,6 +1,6 @@
 from typing import List, Dict
-import logging
 import math
+import logging
 
 from ingestion_service.errors import IndexingError
 from ingestion_service.metrics import metrics
@@ -10,11 +10,11 @@ logger = logging.getLogger(__name__)
 
 def _cosine(a, b):
     dot = sum(x * y for x, y in zip(a, b))
-    na = math.sqrt(sum(x * x for x in a))
-    nb = math.sqrt(sum(y * y for y in b))
-    if na == 0 or nb == 0:
+    norm_a = math.sqrt(sum(x * x for x in a))
+    norm_b = math.sqrt(sum(y * y for y in b))
+    if norm_a == 0 or norm_b == 0:
         return 0.0
-    return dot / (na * nb)
+    return dot / (norm_a * norm_b)
 
 
 class BaseVectorStore:
@@ -24,7 +24,7 @@ class BaseVectorStore:
     def delete(self, filter: Dict):
         raise NotImplementedError
 
-    def search(self, vector, top_k=5, filter=None):
+    def search(self, vector: List[float], top_k: int, filter: Dict):
         raise NotImplementedError
 
 
@@ -38,51 +38,46 @@ class InMemoryVectorStore(BaseVectorStore):
                 raise IndexingError("Vector must have an id")
             self.vectors[v["id"]] = v
 
-        metrics.incr("indexer.upsert_count", len(vectors))
+        metrics.incr("indexer.upsert", len(vectors))
 
     def delete(self, filter: Dict):
         to_delete = []
         for k, v in self.vectors.items():
-            meta = v.get("metadata", {})
-            if all(meta.get(fk) == fv for fk, fv in filter.items()):
+            if all(v["metadata"].get(fk) == fv for fk, fv in filter.items()):
                 to_delete.append(k)
 
         for k in to_delete:
             del self.vectors[k]
 
-        metrics.incr("indexer.delete_count")
+        metrics.incr("indexer.delete", len(to_delete))
 
-    def search(self, vector, top_k=5, filter=None):
+    def search(self, vector: List[float], top_k: int, filter: Dict):
         results = []
 
-        for item in self.vectors.values():
-            meta = item.get("metadata", {})
-            if filter:
-                if not all(meta.get(k) == v for k, v in filter.items()):
-                    continue
+        for v in self.vectors.values():
+            metadata = v["metadata"]
 
-            score = _cosine(vector, item["vector"])
+            if not all(metadata.get(k) == val for k, val in filter.items()):
+                continue
+
+            score = _cosine(vector, v["vector"])
             results.append({
-                "id": item["id"],
+                "id": v["id"],
                 "score": score,
-                "metadata": meta,
+                "metadata": metadata,
             })
 
         results.sort(key=lambda x: x["score"], reverse=True)
         return results[:top_k]
 
 
-def index_chunks(
-    *,
-    chunks: List[Dict],
-    vector_store: BaseVectorStore,
-):
+def index_chunks(chunks: List[Dict], vector_store: BaseVectorStore):
     if not chunks:
         return
 
     required = {
         "chunk_id",
-        "embeddings",
+        "embedding",
         "doc_id",
         "sha256",
         "chunk_index",
@@ -100,32 +95,15 @@ def index_chunks(
 
         vectors.append({
             "id": c["chunk_id"],
-            "vector": c["embeddings"],
+            "vector": c["embedding"],
             "metadata": {
+                "tenant_id": c["tenant_id"],
                 "doc_id": c["doc_id"],
                 "sha256": c["sha256"],
                 "chunk_index": c["chunk_index"],
                 "char_start": c["char_start"],
                 "char_end": c["char_end"],
-                "tenant_id": c["tenant_id"],
             },
         })
 
     vector_store.upsert(vectors)
-
-def delete_document_version(
-    *,
-    doc_id: str,
-    sha256: str,
-    vector_store: BaseVectorStore,
-):
-    """
-    Delete all vectors belonging to a specific document version.
-    """
-    vector_store.delete(
-        {
-            "doc_id": doc_id,
-            "sha256": sha256,
-        }
-    )
-    metrics.incr("indexer.delete_count")

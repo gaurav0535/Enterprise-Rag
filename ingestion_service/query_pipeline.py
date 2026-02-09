@@ -11,6 +11,10 @@ def query_documents(
     """
     End to end retrieval pipeline.
     """
+    # Merge tenant_id into filter
+    if filter is None:
+        filter = {}
+    filter["tenant_id"] = tenant_id
 
-    return retriever.retrieve(tenant_id=tenant_id, query=query,top_k=top_k,filter=filter)
+    return retriever.retrieve(query=query, top_k=top_k, filter=filter)
     

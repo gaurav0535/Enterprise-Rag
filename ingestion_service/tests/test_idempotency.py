@@ -19,7 +19,6 @@ def test_reingest_same_document(tmp_path):
         doc_id="doc1",
         embedder=MockEmbedder(),
         vector_store=store,
-        registry=MagicMock(),
     )
 
     vector_count_after_first = len(store.vectors)
@@ -30,7 +29,6 @@ def test_reingest_same_document(tmp_path):
         doc_id="doc1",
         embedder=MockEmbedder(),
         vector_store=store,
-        registry=MagicMock(),
     )
 
     vector_count_after_second = len(store.vectors)

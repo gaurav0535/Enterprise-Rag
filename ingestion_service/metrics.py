@@ -1,29 +1,49 @@
+# ingestion_service/metrics.py
+
 import time
-from collections import defaultdict
-from contextlib import contextmanager
+import threading
+from collections import defaultdict, deque
 
-class MetricsRegistry:
-    """
-    In-memory metrics registry.
-    """
+class Metrics:
     def __init__(self):
+        self._lock = threading.Lock()
         self.counters = defaultdict(int)
-        self.timings = defaultdict(list)
+        self.timings = defaultdict(deque)
 
-    def incr(self, name:str ,value: int = 1):
-        self.counters[name] += value
+    # -------- Counters --------
+    def incr(self, name: str, value: int = 1):
+        with self._lock:
+            self.counters[name] += value
 
-    def record_time(self, name:str, duration: float):
-        self.timings[name].append(duration)
+    def get_counter(self, name: str) -> int:
+        return self.counters.get(name, 0)
 
-    @contextmanager
-    def timer(self,name:str):
-        start = time.time()
-        try:
-            yield
-        finally:
-            duration = time.time() - start
-            self.record_time(name,duration)
+    # -------- Timings --------
+    def timing(self, name: str, value_ms: float):
+        with self._lock:
+            self.timings[name].append(value_ms)
+            # keep bounded memory
+            if len(self.timings[name]) > 1000:
+                self.timings[name].popleft()
+
+    def stats(self, name: str):
+        values = list(self.timings.get(name, []))
+        if not values:
+            return None
+
+        values.sort()
+        return {
+            "count": len(values),
+            "avg": sum(values) / len(values),
+            "p95": values[int(0.95 * len(values)) - 1],
+            "max": max(values),
+        }
+
+    def snapshot(self):
+        return {
+            "counters": dict(self.counters),
+            "timings": {k: self.stats(k) for k in self.timings},
+        }
 
 
-metrics = MetricsRegistry()
+metrics = Metrics()
